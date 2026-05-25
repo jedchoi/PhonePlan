@@ -1,0 +1,196 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../models/price_preset.dart';
+import '../../providers/price_preset_provider.dart';
+import '../../theme/app_theme.dart';
+
+// 설정 > 요금제 프리셋 관리 화면
+class PriceManagementScreen extends StatelessWidget {
+  const PriceManagementScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat('#,###', 'ko_KR');
+    return Scaffold(
+      appBar: AppBar(title: const Text('요금제 프리셋 관리')),
+      body: Consumer<PricePresetProvider>(
+        builder: (context, prov, _) {
+          final presets = prov.presets;
+          return Column(
+            children: [
+              Expanded(
+                child: presets.isEmpty
+                    ? const Center(
+                        child: Text('등록된 요금제 프리셋이 없습니다.',
+                            style: TextStyle(color: AppTheme.diffColor)),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: presets.length,
+                        itemBuilder: (context, index) {
+                          final preset = presets[index];
+                          return _buildPresetChip(
+                              context, prov, preset, fmt);
+                        },
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showEditDialog(context, prov, null),
+                    icon: const Icon(Icons.add, color: AppTheme.secondary),
+                    label: const Text('요금제 추가',
+                        style: TextStyle(color: AppTheme.secondary)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.secondary),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPresetChip(
+    BuildContext context,
+    PricePresetProvider prov,
+    PricePreset preset,
+    NumberFormat fmt,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Text(
+          preset.name != null
+              ? '${preset.name} (${fmt.format(preset.amount)}원)'
+              : '${fmt.format(preset.amount)}원',
+          style: const TextStyle(color: Colors.white),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: AppTheme.primary),
+              onPressed: () => _showEditDialog(context, prov, preset),
+            ),
+            IconButton(
+              icon:
+                  const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: () => _confirmDelete(context, prov, preset),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditDialog(
+    BuildContext context,
+    PricePresetProvider prov,
+    PricePreset? existing,
+  ) {
+    final amountCtrl = TextEditingController(
+        text: existing?.amount.toString() ?? '');
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardBg,
+        title: Text(
+          existing == null ? '요금제 추가' : '요금제 편집',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                  labelText: '금액 (필수)', suffixText: '원'),
+              style: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nameCtrl,
+              decoration:
+                  const InputDecoration(labelText: '이름 (선택)', hintText: '예: 베이직 요금제'),
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final amount = int.tryParse(amountCtrl.text);
+              if (amount == null || amount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('올바른 금액을 입력해주세요.')),
+                );
+                return;
+              }
+              final name =
+                  nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim();
+              if (existing == null) {
+                await prov.add(amount: amount, name: name);
+              } else {
+                await prov.update(
+                    existing.copyWith(amount: amount, name: name, clearName: name == null));
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('저장',
+                style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(
+    BuildContext context,
+    PricePresetProvider prov,
+    PricePreset preset,
+  ) {
+    final fmt = NumberFormat('#,###', 'ko_KR');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardBg,
+        title: const Text('삭제 확인', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '${fmt.format(preset.amount)}원 요금제 프리셋을 삭제하시겠습니까?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await prov.remove(preset.id);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child:
+                const Text('삭제', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+}
