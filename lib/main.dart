@@ -37,6 +37,9 @@ void main() async {
     await storage.setInitialized();
   }
 
+  // v3: 누락된 기본 기종 보완 (이름 중복 없이 추가)
+  await phonePresetProv.ensureDefaultPhonesExist();
+
   // 구버전 Device 데이터 마이그레이션 (devices → phone_presets + device_offers)
   final oldDevicesJson = storage.loadOldDevices();
   if (oldDevicesJson.isNotEmpty) {

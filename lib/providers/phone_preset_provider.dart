@@ -68,29 +68,63 @@ class PhonePresetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 앱 최초 실행 시 기본 13개 기종 초기화
+  // ─────────────────────────────────────────
+  // 기본 기종 목록 (v3 — 19개)
+  // ─────────────────────────────────────────
+  static final List<Map<String, String>> _defaultPhones = [
+    // 삼성 S 시리즈
+    {'name': '갤럭시 S25', 'manufacturer': '삼성', 'releaseDate': '2025-02'},
+    {'name': '갤럭시 S25+', 'manufacturer': '삼성', 'releaseDate': '2025-02'},
+    {'name': '갤럭시 S25 Ultra', 'manufacturer': '삼성', 'releaseDate': '2025-02'},
+    {'name': '갤럭시 S25 Edge', 'manufacturer': '삼성', 'releaseDate': '2025-05'},
+    // 삼성 Z 시리즈
+    {'name': '갤럭시 Z Flip7', 'manufacturer': '삼성', 'releaseDate': '2025-07'},
+    {'name': '갤럭시 Z Flip7 FE', 'manufacturer': '삼성', 'releaseDate': '2025-07'},
+    {'name': '갤럭시 Z Fold7', 'manufacturer': '삼성', 'releaseDate': '2025-07'},
+    // 삼성 A 시리즈
+    {'name': '갤럭시 A06', 'manufacturer': '삼성', 'releaseDate': '2025-03'},
+    {'name': '갤럭시 A16', 'manufacturer': '삼성', 'releaseDate': '2025-03'},
+    {'name': '갤럭시 A26', 'manufacturer': '삼성', 'releaseDate': '2025-03'},
+    {'name': '갤럭시 A36', 'manufacturer': '삼성', 'releaseDate': '2025-03'},
+    {'name': '갤럭시 A56', 'manufacturer': '삼성', 'releaseDate': '2025-03'},
+    // 삼성 기타
+    {'name': '갤럭시 퀀텀6', 'manufacturer': '삼성', 'releaseDate': '2025-04'},
+    // 애플
+    {'name': 'iPhone 16e', 'manufacturer': '애플', 'releaseDate': '2025-02'},
+    {'name': 'iPhone 17', 'manufacturer': '애플', 'releaseDate': '2025-09'},
+    {'name': 'iPhone 17 Air', 'manufacturer': '애플', 'releaseDate': '2025-09'},
+    {'name': 'iPhone 17 Pro', 'manufacturer': '애플', 'releaseDate': '2025-09'},
+    {'name': 'iPhone 17 Pro Max', 'manufacturer': '애플', 'releaseDate': '2025-09'},
+    {'name': 'iPhone 17e', 'manufacturer': '애플', 'releaseDate': '2026-03'},
+  ];
+
+  /// 앱 최초 실행(첫 번째 ever) 시 기본 목록 전체 주입
   Future<void> initDefaults() async {
     if (_presets.isNotEmpty) return;
+    await _seedDefaults(_defaultPhones);
+  }
 
-    final defaults = [
-      // 삼성
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 S25', manufacturer: '삼성', releaseDate: '2025-02'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 S25+', manufacturer: '삼성', releaseDate: '2025-02'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 S25 Ultra', manufacturer: '삼성', releaseDate: '2025-02'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 S25 Edge', manufacturer: '삼성', releaseDate: '2025-05'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 Z Flip7', manufacturer: '삼성', releaseDate: '2025-07'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 Z Fold7', manufacturer: '삼성', releaseDate: '2025-07'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 A36', manufacturer: '삼성', releaseDate: '2025-03'),
-      PhonePreset(id: const Uuid().v4(), name: '갤럭시 A56', manufacturer: '삼성', releaseDate: '2025-03'),
-      // 애플
-      PhonePreset(id: const Uuid().v4(), name: 'iPhone 16e', manufacturer: '애플', releaseDate: '2025-02'),
-      PhonePreset(id: const Uuid().v4(), name: 'iPhone 17', manufacturer: '애플', releaseDate: '2025-09'),
-      PhonePreset(id: const Uuid().v4(), name: 'iPhone 17 Plus', manufacturer: '애플', releaseDate: '2025-09'),
-      PhonePreset(id: const Uuid().v4(), name: 'iPhone 17 Pro', manufacturer: '애플', releaseDate: '2025-09'),
-      PhonePreset(id: const Uuid().v4(), name: 'iPhone 17 Pro Max', manufacturer: '애플', releaseDate: '2025-09'),
-    ];
+  /// 이름 기준 중복 체크 후 누락된 기본 기종만 추가
+  /// 반환값: 추가된 기종 수
+  Future<int> ensureDefaultPhonesExist() async {
+    final existingNames = _presets.map((p) => p.name).toSet();
+    final toAdd = _defaultPhones
+        .where((d) => !existingNames.contains(d['name']))
+        .toList();
+    if (toAdd.isEmpty) return 0;
+    await _seedDefaults(toAdd);
+    return toAdd.length;
+  }
 
-    _presets = defaults;
+  Future<void> _seedDefaults(List<Map<String, String>> phones) async {
+    for (final d in phones) {
+      _presets.add(PhonePreset(
+        id: const Uuid().v4(),
+        name: d['name']!,
+        manufacturer: d['manufacturer'],
+        releaseDate: d['releaseDate'],
+      ));
+    }
     await _save();
     notifyListeners();
   }

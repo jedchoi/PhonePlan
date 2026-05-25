@@ -18,9 +18,37 @@ class PhoneManagementScreen extends StatelessWidget {
           final presets = prov.presets;
 
           if (presets.isEmpty) {
-            return const Center(
-              child: Text('등록된 기종이 없습니다.',
-                  style: TextStyle(color: AppTheme.diffColor)),
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final added = await prov.ensureDefaultPhonesExist();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(added > 0
+                              ? '$added개의 기본 기종이 추가되었습니다.'
+                              : '이미 모든 기본 기종이 등록되어 있습니다.'),
+                          duration: const Duration(seconds: 2),
+                        ));
+                      }
+                    },
+                    icon: const Icon(Icons.refresh,
+                        color: AppTheme.secondary, size: 18),
+                    label: const Text('기본 기종 불러오기',
+                        style: TextStyle(color: AppTheme.secondary)),
+                    style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppTheme.secondary)),
+                  ),
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Text('등록된 기종이 없습니다.',
+                        style: TextStyle(color: AppTheme.diffColor)),
+                  ),
+                ),
+              ],
             );
           }
 
@@ -52,6 +80,33 @@ class PhoneManagementScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
+              // 기본 기종 다시 불러오기 버튼
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final added = await prov.ensureDefaultPhonesExist();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(
+                          added > 0
+                              ? '$added개의 기본 기종이 추가되었습니다.'
+                              : '이미 모든 기본 기종이 등록되어 있습니다.',
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ));
+                    }
+                  },
+                  icon: const Icon(Icons.refresh,
+                      color: AppTheme.secondary, size: 18),
+                  label: const Text('기본 기종 다시 불러오기',
+                      style: TextStyle(color: AppTheme.secondary)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.secondary),
+                  ),
+                ),
+              ),
+              const Divider(height: 16),
               for (final mfr in sortedKeys) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
