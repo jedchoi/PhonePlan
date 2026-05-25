@@ -7,7 +7,9 @@ class StorageService {
   static const String _pricePresetsKey = 'price_presets';
   static const String _addonPresetsKey = 'addon_presets';
   static const String _userProfileKey = 'user_profile';
-  static const String _devicesKey = 'devices';
+  static const String _devicesKey = 'devices'; // 기존 키 (마이그레이션용)
+  static const String _deviceOffersKey = 'device_offers'; // 신규 키
+  static const String _phonePresetsKey = 'phone_presets'; // 신규 키
   static const String _initializedKey = 'app_initialized';
 
   final SharedPreferences _prefs;
@@ -66,14 +68,35 @@ class StorageService {
   Future<void> saveUserProfile(Map<String, dynamic> data) =>
       _prefs.setString(_userProfileKey, json.encode(data));
 
-  // --- 기기 목록 ---
-  List<Map<String, dynamic>> loadDevices() {
+  // --- 기기 목록 (구버전 - 마이그레이션용) ---
+  List<Map<String, dynamic>> loadOldDevices() {
     final jsonStr = _prefs.getString(_devicesKey);
     if (jsonStr == null) return [];
     final list = json.decode(jsonStr) as List;
     return list.cast<Map<String, dynamic>>();
   }
 
-  Future<void> saveDevices(List<Map<String, dynamic>> data) =>
-      _prefs.setString(_devicesKey, json.encode(data));
+  Future<void> clearOldDevices() => _prefs.remove(_devicesKey);
+
+  // --- 기기 오퍼 목록 (신버전) ---
+  List<Map<String, dynamic>> loadDeviceOffers() {
+    final jsonStr = _prefs.getString(_deviceOffersKey);
+    if (jsonStr == null) return [];
+    final list = json.decode(jsonStr) as List;
+    return list.cast<Map<String, dynamic>>();
+  }
+
+  Future<void> saveDeviceOffers(List<Map<String, dynamic>> data) =>
+      _prefs.setString(_deviceOffersKey, json.encode(data));
+
+  // --- 기종 프리셋 ---
+  List<Map<String, dynamic>> loadPhonePresets() {
+    final jsonStr = _prefs.getString(_phonePresetsKey);
+    if (jsonStr == null) return [];
+    final list = json.decode(jsonStr) as List;
+    return list.cast<Map<String, dynamic>>();
+  }
+
+  Future<void> savePhonePresets(List<Map<String, dynamic>> data) =>
+      _prefs.setString(_phonePresetsKey, json.encode(data));
 }

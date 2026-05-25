@@ -43,6 +43,11 @@ class AddonPresetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 통신사 둘러보기에서 부가서비스 추가
+  Future<void> addFromCarrier(String name, int amount) async {
+    await add(amount: amount, name: name);
+  }
+
   // 최초 실행 시 기본 부가서비스 6개 주입
   Future<void> initDefaults() async {
     const uuid = Uuid();

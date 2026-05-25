@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'settings/discount_management_screen.dart';
 import 'settings/price_management_screen.dart';
 import 'settings/addon_management_screen.dart';
+import 'settings/phone_management_screen.dart';
+import 'settings/carrier_browse_screen.dart';
 import '../theme/app_theme.dart';
 
 // 탭4: 설정 화면 (마스터 데이터 관리)
@@ -47,6 +49,28 @@ class Tab4SettingsScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                   builder: (_) => const AddonManagementScreen()),
+            ),
+          ),
+          _buildSettingsTile(
+            context,
+            icon: Icons.smartphone_outlined,
+            title: '기종 관리',
+            subtitle: '갤럭시, 아이폰 등 기종 프리셋 관리',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const PhoneManagementScreen()),
+            ),
+          ),
+          _buildSettingsTile(
+            context,
+            icon: Icons.cell_tower_outlined,
+            title: '통신사 둘러보기',
+            subtitle: 'SKT·KT·LG U+ 요금제·부가서비스 확인',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const CarrierBrowseScreen()),
             ),
           ),
           const Divider(height: 32),

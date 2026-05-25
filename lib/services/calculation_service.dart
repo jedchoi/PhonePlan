@@ -1,4 +1,4 @@
-import '../models/device.dart';
+import '../models/device_offer.dart';
 import '../models/discount_program.dart';
 import '../models/purchase_result.dart';
 import '../models/user_profile.dart';
@@ -8,7 +8,7 @@ class CalculationService {
   static const int totalMonths = 24;
 
   DeviceComparison calculate(
-    Device device,
+    DeviceOffer offer,
     UserProfile profile,
     List<DiscountProgram> allPrograms,
   ) {
@@ -34,7 +34,7 @@ class CalculationService {
 
     // ① 자급제 계산
     final jagupResult = _calcJagup(
-      device: device,
+      offer: offer,
       profile: profile,
       currentRate: currentRate,
       selectedPrograms: selectedPrograms,
@@ -43,7 +43,7 @@ class CalculationService {
 
     // ② 선택약정 계산
     final seonyakResult = _calcSeonyak(
-      device: device,
+      offer: offer,
       profile: profile,
       currentRate: currentRate,
       hasSeonyak: hasSeonyak,
@@ -53,7 +53,7 @@ class CalculationService {
 
     // ③ 공시지원 계산
     final gongsiResult = _calcGongsi(
-      device: device,
+      offer: offer,
       profile: profile,
       currentRate: currentRate,
       hasSeonyak: hasSeonyak,
@@ -73,7 +73,7 @@ class CalculationService {
   }
 
   PurchaseResult _calcJagup({
-    required Device device,
+    required DeviceOffer offer,
     required UserProfile profile,
     required double currentRate,
     required List<DiscountProgram> selectedPrograms,
@@ -82,10 +82,10 @@ class CalculationService {
     // 자급제_기기값 + 기존요금제 × 24 × (1 - 현재할인율)
     final planCost =
         (profile.currentPlanAmount * totalMonths * (1 - currentRate)).round();
-    final total = device.jagupPrice + planCost;
+    final total = offer.jagupPrice + planCost;
 
     return PurchaseResult(
-      devicePrice: device.jagupPrice,
+      devicePrice: offer.jagupPrice,
       planCost: planCost,
       addonCost: 0,
       total: total,
@@ -97,7 +97,7 @@ class CalculationService {
   }
 
   PurchaseResult _calcSeonyak({
-    required Device device,
+    required DeviceOffer offer,
     required UserProfile profile,
     required double currentRate,
     required bool hasSeonyak,
@@ -109,12 +109,12 @@ class CalculationService {
         ? currentRate
         : (currentRate + 0.25).clamp(0.0, 1.0);
 
-    final requiredMonths = device.seonyakRequiredMonths.clamp(0, totalMonths);
+    final requiredMonths = offer.seonyakRequiredMonths.clamp(0, totalMonths);
     final remainMonths = totalMonths - requiredMonths;
 
     // 필수 요금제 기간 비용
     final requiredPlanCost = requiredMonths > 0
-        ? (device.seonyakRequiredPlan * requiredMonths * (1 - appliedRate))
+        ? (offer.seonyakRequiredPlan * requiredMonths * (1 - appliedRate))
             .round()
         : 0;
 
@@ -127,9 +127,9 @@ class CalculationService {
 
     // 부가서비스 비용
     final addonCost =
-        device.seonyakAddons.fold(0, (sum, a) => sum + a.amount * a.months);
+        offer.seonyakAddons.fold(0, (sum, a) => sum + a.amount * a.months);
 
-    final total = device.seonyakPrice + planCost + addonCost;
+    final total = offer.seonyakPrice + planCost + addonCost;
 
     // 할인 설명 (선택약정 미포함인 경우 +25% 표시)
     String explanation;
@@ -152,7 +152,7 @@ class CalculationService {
     String planDetail = '';
     if (requiredMonths > 0) {
       planDetail =
-          '필수요금제 ${device.seonyakRequiredPlan}원 × $requiredMonths개월 × ${((1 - appliedRate) * 100).round()}%';
+          '필수요금제 ${offer.seonyakRequiredPlan}원 × $requiredMonths개월 × ${((1 - appliedRate) * 100).round()}%';
     }
     if (remainMonths > 0) {
       if (planDetail.isNotEmpty) planDetail += '\n';
@@ -161,7 +161,7 @@ class CalculationService {
     }
 
     return PurchaseResult(
-      devicePrice: device.seonyakPrice,
+      devicePrice: offer.seonyakPrice,
       planCost: planCost,
       addonCost: addonCost,
       total: total,
@@ -172,7 +172,7 @@ class CalculationService {
   }
 
   PurchaseResult _calcGongsi({
-    required Device device,
+    required DeviceOffer offer,
     required UserProfile profile,
     required double currentRate,
     required bool hasSeonyak,
@@ -184,12 +184,12 @@ class CalculationService {
         ? (currentRate - 0.25).clamp(0.0, 1.0)
         : currentRate;
 
-    final requiredMonths = device.gongsiRequiredMonths.clamp(0, totalMonths);
+    final requiredMonths = offer.gongsiRequiredMonths.clamp(0, totalMonths);
     final remainMonths = totalMonths - requiredMonths;
 
     // 필수 요금제 기간 비용
     final requiredPlanCost = requiredMonths > 0
-        ? (device.gongsiRequiredPlan * requiredMonths * (1 - appliedRate))
+        ? (offer.gongsiRequiredPlan * requiredMonths * (1 - appliedRate))
             .round()
         : 0;
 
@@ -202,9 +202,9 @@ class CalculationService {
 
     // 부가서비스 비용
     final addonCost =
-        device.gongsiAddons.fold(0, (sum, a) => sum + a.amount * a.months);
+        offer.gongsiAddons.fold(0, (sum, a) => sum + a.amount * a.months);
 
-    final total = device.gongsiPrice + planCost + addonCost;
+    final total = offer.gongsiPrice + planCost + addonCost;
 
     // 할인 설명 (선택약정 포함인 경우 -25% 표시)
     String explanation;
@@ -226,7 +226,7 @@ class CalculationService {
     String planDetail = '';
     if (requiredMonths > 0) {
       planDetail =
-          '필수요금제 ${device.gongsiRequiredPlan}원 × $requiredMonths개월 × ${((1 - appliedRate) * 100).round()}%';
+          '필수요금제 ${offer.gongsiRequiredPlan}원 × $requiredMonths개월 × ${((1 - appliedRate) * 100).round()}%';
     }
     if (remainMonths > 0) {
       if (planDetail.isNotEmpty) planDetail += '\n';
@@ -235,7 +235,7 @@ class CalculationService {
     }
 
     return PurchaseResult(
-      devicePrice: device.gongsiPrice,
+      devicePrice: offer.gongsiPrice,
       planCost: planCost,
       addonCost: addonCost,
       total: total,

@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/device.dart';
+import '../models/device_offer.dart';
 import '../models/purchase_result.dart';
 import '../providers/device_provider.dart';
 import '../providers/discount_program_provider.dart';
+import '../providers/phone_preset_provider.dart';
 import '../providers/user_profile_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/comparison_bar_chart.dart';
 
-// 탭3: 비교 결과 화면 (전체 요약 + 상세)
+// 탭3: 비교 결과 화면 (전체 비교 + 상세 분석)
 class Tab3ResultsScreen extends StatefulWidget {
   const Tab3ResultsScreen({super.key});
 
@@ -20,7 +21,12 @@ class Tab3ResultsScreen extends StatefulWidget {
 class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
-  String? _selectedDeviceId;
+
+  // 뷰 A: 기종별 매장 비교에서 선택된 기종
+  String? _selectedPresetId;
+
+  // 뷰 B: 상세 분석에서 선택된 오퍼
+  DeviceOffer? _selectedOfferForDetail;
 
   @override
   void initState() {
@@ -50,11 +56,11 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
           ],
         ),
       ),
-      body: Consumer3<DeviceProvider, UserProfileProvider,
+      body: Consumer4<DeviceProvider, PhonePresetProvider, UserProfileProvider,
           DiscountProgramProvider>(
-        builder: (context, deviceProv, profileProv, discountProv, _) {
-          final devices = deviceProv.devices;
-          if (devices.isEmpty) {
+        builder: (context, deviceProv, phoneProv, profileProv, discountProv, _) {
+          final offers = deviceProv.offers;
+          if (offers.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -75,18 +81,26 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
           final programs = discountProv.programs;
           final comparisons = deviceProv.compareAll(profile, programs);
 
-          // 선택된 기기 초기화 (목록에서 삭제된 경우 처리)
-          if (_selectedDeviceId != null &&
-              !devices.any((d) => d.id == _selectedDeviceId)) {
-            _selectedDeviceId = null;
+          // 등록된 오퍼에서 unique 기종 추출 (등록 순서 유지)
+          final presetIds = <String>[];
+          for (final o in offers) {
+            if (!presetIds.contains(o.phonePresetId)) {
+              presetIds.add(o.phonePresetId);
+            }
           }
-          _selectedDeviceId ??= devices.first.id;
+
+          // 선택된 기종 초기화
+          if (_selectedPresetId == null || !presetIds.contains(_selectedPresetId)) {
+            _selectedPresetId = presetIds.first;
+          }
 
           return TabBarView(
             controller: _tabCtrl,
             children: [
-              _buildOverviewTab(devices, comparisons),
-              _buildDetailTab(devices, comparisons),
+              _buildOverviewTab(
+                  offers, comparisons, phoneProv, presetIds),
+              _buildDetailTab(
+                  offers, comparisons, phoneProv, presetIds),
             ],
           );
         },
@@ -94,128 +108,199 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
     );
   }
 
-  // 뷰 A: 전체 기기 한눈에 비교
+  // ─── 뷰 A: 기종별 매장 비교 ───
   Widget _buildOverviewTab(
-    List<Device> devices,
+    List<DeviceOffer> offers,
     Map<String, DeviceComparison> comparisons,
+    PhonePresetProvider phoneProv,
+    List<String> presetIds,
   ) {
     final fmt = NumberFormat('#,###', 'ko_KR');
-    final methods = PurchaseMethod.values;
+
+    // 현재 기종의 오퍼들
+    final currentOffers =
+        offers.where((o) => o.phonePresetId == _selectedPresetId).toList();
+
+    // 전체 행+방식 중 절대 최저가
+    int? absMin;
+    String? absMinOfferId;
+    PurchaseMethod? absMinMethod;
+    for (final o in currentOffers) {
+      final comp = comparisons[o.id]!;
+      for (final m in PurchaseMethod.values) {
+        final t = comp.resultFor(m).total;
+        if (absMin == null || t < absMin) {
+          absMin = t;
+          absMinOfferId = o.id;
+          absMinMethod = m;
+        }
+      }
+    }
+
+    // 기종 목록 (기종 드롭다운용 - PhonePreset 이름)
+    final presetItems = presetIds.map((id) {
+      final preset = phoneProv.getById(id);
+      return DropdownMenuItem<String>(
+        value: id,
+        child: Text(preset?.name ?? id),
+      );
+    }).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '전체 기기 비교',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold),
+          // 기종 선택 드롭다운
+          DropdownButton<String>(
+            value: _selectedPresetId,
+            dropdownColor: AppTheme.cardBg,
+            style: const TextStyle(color: Colors.white),
+            underline: Container(height: 1, color: AppTheme.primary),
+            isExpanded: true,
+            items: presetItems,
+            onChanged: (id) => setState(() => _selectedPresetId = id),
           ),
-          const SizedBox(height: 12),
-          // 테이블 헤더
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Table(
-              columnWidths: const {
-                0: FlexColumnWidth(2),
-                1: FlexColumnWidth(2),
-                2: FlexColumnWidth(2),
-                3: FlexColumnWidth(2),
-              },
-              children: [
-                TableRow(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Color(0xFF2C2C2C)),
-                    ),
+          const SizedBox(height: 16),
+
+          if (currentOffers.isEmpty)
+            const Center(
+              child: Text('이 기종의 오퍼가 없습니다.',
+                  style: TextStyle(color: AppTheme.diffColor)),
+            )
+          else ...[
+            // 매장별 비교 표
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A2E),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Table(
+                  defaultColumnWidth: const IntrinsicColumnWidth(),
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: Colors.white12),
+                    bottom: BorderSide(color: Colors.white12),
                   ),
                   children: [
-                    _tableHeader('기기명'),
-                    _tableHeader('자급제'),
-                    _tableHeader('선택약정'),
-                    _tableHeader('공시지원'),
+                    // 헤더
+                    TableRow(
+                      decoration: const BoxDecoration(
+                        border: Border(
+                            bottom: BorderSide(color: Color(0xFF2C2C2C))),
+                      ),
+                      children: [
+                        _th('매장'),
+                        _th('자급제'),
+                        _th('선택약정'),
+                        _th('공시지원'),
+                        _th('최저'),
+                      ],
+                    ),
+                    // 각 매장 행
+                    ...currentOffers.map((offer) {
+                      final comp = comparisons[offer.id]!;
+                      return TableRow(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                              bottom:
+                                  BorderSide(color: Color(0xFF2C2C2C))),
+                        ),
+                        children: [
+                          // 매장명
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedOfferForDetail = offer;
+                              });
+                              _tabCtrl.animateTo(1);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              child: Text(
+                                offer.storeName,
+                                style: const TextStyle(
+                                    color: AppTheme.primary, fontSize: 12),
+                              ),
+                            ),
+                          ),
+                          // 자급제
+                          _priceCell(
+                            fmt,
+                            offer,
+                            comp,
+                            PurchaseMethod.jagup,
+                            absMinOfferId,
+                            absMinMethod,
+                            offer.jagupPrice == 0,
+                          ),
+                          // 선택약정
+                          _priceCell(
+                            fmt,
+                            offer,
+                            comp,
+                            PurchaseMethod.seonyak,
+                            absMinOfferId,
+                            absMinMethod,
+                            false,
+                          ),
+                          // 공시지원
+                          _priceCell(
+                            fmt,
+                            offer,
+                            comp,
+                            PurchaseMethod.gongsi,
+                            absMinOfferId,
+                            absMinMethod,
+                            offer.gongsiPrice == 0,
+                          ),
+                          // 최저 방식
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 10),
+                            child: Column(
+                              children: [
+                                Text(
+                                  comp.cheapest.label,
+                                  style: const TextStyle(
+                                      color: AppTheme.cheapest,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                                Text(
+                                  fmt.format(comp.cheapestResult.total),
+                                  style: const TextStyle(
+                                      color: AppTheme.cheapest,
+                                      fontSize: 11),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
                   ],
                 ),
-                ...devices.map((device) {
-                  final comp = comparisons[device.id]!;
-                  return TableRow(
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Color(0xFF2C2C2C)),
-                      ),
-                    ),
-                    children: [
-                      // 기기명
-                      InkWell(
-                        onTap: () {
-                          setState(() => _selectedDeviceId = device.id);
-                          _tabCtrl.animateTo(1);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 10),
-                          child: Text(
-                            device.name,
-                            style: const TextStyle(
-                                color: AppTheme.primary, fontSize: 12),
-                          ),
-                        ),
-                      ),
-                      // 각 방식 금액
-                      ...methods.map((m) {
-                        final result = comp.resultFor(m);
-                        final isCheapest = m == comp.cheapest;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              if (isCheapest)
-                                const Text('🏆',
-                                    style: TextStyle(fontSize: 10)),
-                              Text(
-                                fmt.format(result.total),
-                                style: TextStyle(
-                                  color: isCheapest
-                                      ? AppTheme.cheapest
-                                      : Colors.white70,
-                                  fontSize: 11,
-                                  fontWeight: isCheapest
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  );
-                }),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '* 기기명을 탭하면 상세 분석 화면으로 이동합니다',
-            style: TextStyle(color: AppTheme.diffColor, fontSize: 11),
-          ),
+            const SizedBox(height: 8),
+            const Text(
+              '* 매장명을 탭하면 상세 분석으로 이동합니다',
+              style: TextStyle(color: AppTheme.diffColor, fontSize: 11),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _tableHeader(String text) {
+  Widget _th(String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Text(
         text,
         style: const TextStyle(
@@ -225,34 +310,128 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
     );
   }
 
-  // 뷰 B: 특정 기기 상세 비교
+  Widget _priceCell(
+    NumberFormat fmt,
+    DeviceOffer offer,
+    DeviceComparison comp,
+    PurchaseMethod method,
+    String? absMinOfferId,
+    PurchaseMethod? absMinMethod,
+    bool isEmpty,
+  ) {
+    if (isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Text('-',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+            textAlign: TextAlign.center),
+      );
+    }
+
+    final result = comp.resultFor(method);
+    final isCheapest = method == comp.cheapest;
+    final isAbsMin =
+        offer.id == absMinOfferId && method == absMinMethod;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+      child: Column(
+        children: [
+          if (isCheapest)
+            Text(
+              isAbsMin ? '🏆★' : '🏆',
+              style: const TextStyle(fontSize: 10),
+              textAlign: TextAlign.center,
+            ),
+          Text(
+            fmt.format(result.total),
+            style: TextStyle(
+              color: isCheapest ? AppTheme.cheapest : Colors.white70,
+              fontSize: 11,
+              fontWeight:
+                  isCheapest ? FontWeight.bold : FontWeight.normal,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── 뷰 B: 단일 오퍼 상세 분석 ───
   Widget _buildDetailTab(
-    List<Device> devices,
+    List<DeviceOffer> offers,
     Map<String, DeviceComparison> comparisons,
+    PhonePresetProvider phoneProv,
+    List<String> presetIds,
   ) {
     final fmt = NumberFormat('#,###', 'ko_KR');
-    // 현재 선택된 기기 검증 (목록에 없으면 첫 번째로 폴백)
-    if (!devices.any((d) => d.id == _selectedDeviceId)) {
-      _selectedDeviceId = devices.first.id;
+
+    // 현재 기종의 오퍼들
+    final currentOffers = _selectedPresetId != null
+        ? offers.where((o) => o.phonePresetId == _selectedPresetId).toList()
+        : offers;
+
+    // 선택된 오퍼 검증
+    if (_selectedOfferForDetail == null ||
+        !currentOffers.any((o) => o.id == _selectedOfferForDetail!.id)) {
+      _selectedOfferForDetail = currentOffers.isNotEmpty ? currentOffers.first : null;
     }
-    final comp = comparisons[_selectedDeviceId]!;
+
+    final selectedOffer = _selectedOfferForDetail;
+    if (selectedOffer == null) {
+      return const Center(
+        child: Text('오퍼를 선택하세요.', style: TextStyle(color: AppTheme.diffColor)),
+      );
+    }
+
+    final comp = comparisons[selectedOffer.id]!;
     final methods = PurchaseMethod.values;
+    final preset = phoneProv.getById(selectedOffer.phonePresetId);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 기기 선택 드롭다운
+          // 매장 비교로 돌아가기
+          TextButton.icon(
+            onPressed: () => _tabCtrl.animateTo(0),
+            icon: const Icon(Icons.arrow_back, size: 16, color: AppTheme.diffColor),
+            label: const Text('매장 비교로 돌아가기',
+                style: TextStyle(color: AppTheme.diffColor)),
+          ),
+          const SizedBox(height: 8),
+
+          // 기종+오퍼 선택 드롭다운
+          if (preset != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                preset.name,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
           DropdownButton<String>(
-            value: _selectedDeviceId,
+            value: selectedOffer.id,
             dropdownColor: AppTheme.cardBg,
             style: const TextStyle(color: Colors.white),
             underline: Container(height: 1, color: AppTheme.primary),
-            items: devices
-                .map((d) => DropdownMenuItem(value: d.id, child: Text(d.name)))
+            isExpanded: true,
+            items: currentOffers
+                .map((o) => DropdownMenuItem(
+                    value: o.id, child: Text(o.storeName)))
                 .toList(),
-            onChanged: (id) => setState(() => _selectedDeviceId = id),
+            onChanged: (id) {
+              if (id == null) return;
+              setState(() {
+                _selectedOfferForDetail =
+                    currentOffers.firstWhere((o) => o.id == id);
+              });
+            },
           ),
           const SizedBox(height: 16),
 
@@ -342,7 +521,9 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
                     Text(
                       '${fmt.format(result.total)}원',
                       style: TextStyle(
-                        color: isCheapest ? AppTheme.cheapest : Colors.white70,
+                        color: isCheapest
+                            ? AppTheme.cheapest
+                            : Colors.white70,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -356,7 +537,9 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
                         _detailRow('기기값',
                             '${fmt.format(result.devicePrice)}원'),
                         if (result.planDetail.isNotEmpty)
-                          _detailRow('요금제 비용', '${fmt.format(result.planCost)}원',
+                          _detailRow(
+                              '요금제 비용',
+                              '${fmt.format(result.planCost)}원',
                               sub: result.planDetail),
                         if (result.addonCost > 0)
                           _detailRow('부가서비스 비용',
@@ -399,13 +582,16 @@ class _Tab3ResultsScreenState extends State<Tab3ResultsScreen>
                       highlight ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
-              Text(
-                value,
-                style: TextStyle(
-                  color: highlight ? AppTheme.cheapest : Colors.white,
-                  fontSize: 13,
-                  fontWeight:
-                      highlight ? FontWeight.bold : FontWeight.normal,
+              Flexible(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    color: highlight ? AppTheme.cheapest : Colors.white,
+                    fontSize: 13,
+                    fontWeight:
+                        highlight ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  textAlign: TextAlign.end,
                 ),
               ),
             ],
